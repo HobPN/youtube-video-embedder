@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Embedder</title>
+    <style>
+        /* Common styles */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            overflow-y: scroll; /* Ensure vertical scroll is enabled */
+        }
+        
+        /* Scrollbar styles */
+        body::-webkit-scrollbar {
+            width: 8px; /* Width of the scrollbar */
+        }
+        
+        /* Track (the area on which the scrollbar is rendered) */
+        body::-webkit-scrollbar-track {
+            background: #333; /* Color of the track */
+        }
+        
+        /* Handle (the draggable part of the scrollbar) */
+        body::-webkit-scrollbar-thumb {
+            background-color: #666; /* Color of the handle */
+            border-radius: 10px; /* Rounded corners */
+        }
+        
+        /* Handle on hover */
+        body::-webkit-scrollbar-thumb:hover {
+            background-color: #888; /* Darker color on hover */
+        }
+
+        /* Header styles */
+        header {
+            background-color: #333;
+            color: #fff;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 100;
+        }
+
+        /* Form and buttons in header */
+        header form {
+            display: flex;
+            align-items: center;
+        }
+
+        header input[type="url"] {
+            margin-right: 10px;
+            padding: 5px;
+            width: 300px;
+        }
+
+        header button {
+            margin-left: 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+            background-color: #555;
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+        }
+
+        /* Separator styles */
+        .header-separator {
+            margin: 0 10px;
+            border: none;
+            border-bottom: 1px solid #888; /* Example border style */
+        }
+
+        /* Dark mode styles */
+        .dark-mode {
+            background-color: #333;
+            color: #fff;
+            padding-top: 50px; /* Adjust for header height */
+        }
+
+        .dark-mode #embedded_videos {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .dark-mode .video-container {
+            width: 560px;
+            height: 315px;
+            margin: 10px;
+            position: relative;
+            background-color: #333;
+        }
+
+        .dark-mode .video-container.playing {
+            background-color: #111;
+        }
+
+        .dark-mode .video-container.paused {
+            background-color: #222;
+        }
+
+        .dark-mode #error_message {
+            background-color: #666;
+            color: #fff;
+            margin-top: 20px;
+            padding: 10px;
+            display: none;
+        }
+
+        /* Light mode styles */
+        .light-mode {
+            background-color: #f0f0f0;
+            color: #333;
+            padding-top: 50px; /* Adjust for header height */
+        }
+
+        .light-mode #embedded_videos .video-container {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+
+        .light-mode #embedded_videos .video-container.playing,
+        .light-mode #embedded_videos .video-container.paused {
+            background-color: #ccc;
+        }
+
+        .light-mode #error_message {
+            background-color: #333;
+            color: #fff;
+        }
+
+        /* Theater mode styles */
+        .theater-mode .video-container {
+            width: 100%;
+            height: calc(100vh - 100px); /* Adjust as necessary */
+        }
+    </style>
+</head>
+<body class="dark-mode">
+    <header>
+        <h1>YouTube Video Embedder</h1>
+        <form id="video-form">
+            <input type="url" id="video_url" name="video_url" required placeholder="Enter YouTube video URL">
+            <button type="submit" title="Embed Video">Embed</button>
+        </form>
+        <hr class="header-separator">
+        <div class="button-container">
+            <button id="theater-mode-button" title="Toggle Theater Mode">Theater Mode</button>
+            <button id="remove-all-button" class="remove-all-button">Remove All</button>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        </div>
+    </header>
+    
+
+    <div id="embedded_videos" style="margin-top: 100px;"></div>
+    <div id="error_message">
+        <p>Sorry, we couldn't load one or more YouTube videos. Please check your URLs and try again.</p>
+    </div>
+
+    <script>
+        // Load the YouTube iframe API
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        // Create a global array to store YouTube players
+        var players = [];
+
+        // The YouTube iframe API calls this function when it's ready
+        function onYouTubeIframeAPIReady() {
+            console.log('YouTube iframe API is ready');
+
+            // Move the form submission and dark/theater mode toggle code inside this function
+            document.getElementById('video-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+                var videoUrl = document.getElementById('video_url').value;
+
+                // Validate YouTube video or playlist URL
+                var youtubeVideoRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+                var youtubePlaylistRegex = /[?&]list=([a-zA-Z0-9_-]+)/i;
+                var isVideo = youtubeVideoRegex.test(videoUrl);
+                var isPlaylist = youtubePlaylistRegex.test(videoUrl);
+
+                if (!isVideo && !isPlaylist) {
+                    document.getElementById('error_message').style.display = 'block';
+                    return;
+                }
+
+                var videoId = isVideo ? videoUrl.match(youtubeVideoRegex)[4] : null;
+                var playlistId = isPlaylist ? videoUrl.match(youtubePlaylistRegex)[1] : null;
+
+                // Create a container for the video or playlist
+                var videoContainer = document.createElement('div');
+                videoContainer.className = 'video-container';
+                videoContainer.id = isVideo ? 'video_' + videoId : 'playlist_' + playlistId;
+
+                // Add a remove button to the video container
+                var removeButton = document.createElement('button');
+                removeButton.className = 'remove-button';
+                removeButton.innerText = 'Remove';
+                removeButton.onclick = function() {
+                    videoContainer.remove();
+                    players = players.filter(player => player.a.id !== videoContainer.id);
+                };
+                videoContainer.appendChild(removeButton);
+
+                // Add the video container to the embedded videos section
+                document.getElementById('embedded_videos').appendChild(videoContainer);
+
+                // Create YouTube player
+                var player = new YT.Player(videoContainer.id, {
+                    height: '315',
+                    width: '560',
+                    videoId: videoId,
+                    playerVars: {
+                        'autoplay': 0,
+                        'controls': 1,
+                        'enablejsapi': 1,
+                        'modestbranding': 1,
+                        'rel': 0,
+                        'listType': isPlaylist ? 'playlist' : null,
+                        'list': isPlaylist ? playlistId : null
+                    },
+                    events: {
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange,
+                        'onError': onPlayerError
+                    }
+                });
+
+                // Store the player in the players array
+                players.push(player);
+
+                // Clear the input field after submission
+                document.getElementById('video_url').value = '';
+            });
+
+            // Toggle theater mode
+            document.getElementById('theater-mode-button').addEventListener('click', function() {
+                var body = document.body;
+                body.classList.toggle('theater-mode');
+                updatePlayerSizes();
+            });
+
+            // Remove all embeds
+            document.getElementById('remove-all-button').addEventListener('click', function() {
+                document.getElementById('embedded_videos').innerHTML = '';
+                players = [];
+            });
+        }
+
+        // This function is called when the player is ready to receive API calls
+        function onPlayerReady(event) {
+            console.log('Player ready - event:', event);
+        }
+
+        // This function is called when the player's state changes (e.g., play, pause, buffering)
+        function onPlayerStateChange(event) {
+            var playerId = event.target.a.id;
+            var videoContainer = document.getElementById(playerId);
+
+            if (event.data == YT.PlayerState.PLAYING) {
+                videoContainer.classList.add('playing');
+                videoContainer.classList.remove('paused');
+            } else if (event.data == YT.PlayerState.PAUSED) {
+                videoContainer.classList.add('paused');
+                videoContainer.classList.remove('playing');
+            } else {
+                videoContainer.classList.remove('playing', 'paused');
+            }
+        }
+
+        // This function is called when an error occurs
+        function onPlayerError(event) {
+            console.log('Player error:', event.data);
+            var videoContainer = document.getElementById(event.target.a.id);
+            videoContainer.remove();
+            document.getElementById('error_message').style.display = 'block';
+        }
+
+        // Update player sizes for theater mode
+        function updatePlayerSizes() {
+            players.forEach(function(player) {
+                if (document.body.classList.contains('theater-mode')) {
+                    player.setSize(window.innerWidth, window.innerHeight - 100);
+                } else {
+                    player.setSize(560, 315);
+                }
+            });
+        }
+
+        // Call updatePlayerSizes initially and on window resize
+        updatePlayerSizes();
+        window.addEventListener('resize', updatePlayerSizes);
+    </script>
+</body>
+</html>

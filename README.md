@@ -15,7 +15,6 @@ YouTube Video Embedder is a web application that allows users to embed YouTube v
 - HTML5
 - CSS3
 - JavaScript
-- YouTube iframe API
 
 ## How to Use
 
